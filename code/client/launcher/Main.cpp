@@ -315,11 +315,18 @@ int RealMain()
 		LoadLibrary(systemPath);
 	};
 
-	// load some popular DLLs over the system-wide variants
+	// load some popular DLLs as system-wide variants instead of game variants
 	auto systemDlls = {
 		// common ASI loaders
 		L"\\dinput8.dll",
 		L"\\dsound.dll", // breaks DSound init in game code
+
+		// X360CE v3 is buggy with COM hooks
+		L"\\xinput9_1_0.dll",
+		L"\\xinput1_1.dll",
+		L"\\xinput1_2.dll",
+		L"\\xinput1_3.dll",
+		L"\\xinput1_4.dll",
 
 		// packed DLL commonly shipping with RDR mods
 		L"\\version.dll"
@@ -412,6 +419,7 @@ int RealMain()
 		loadSystemDll(L"\\d3d11.dll");
 	}
 
+	LoadLibrary(MakeRelativeCitPath(L"botan.dll").c_str());
 	LoadLibrary(MakeRelativeCitPath(L"dinput8.dll").c_str());
 	LoadLibrary(MakeRelativeCitPath(L"steam_api64.dll").c_str());
 
@@ -609,8 +617,23 @@ int RealMain()
 				VerQueryValue(&versionInfo[0], L"\\", &fixedInfoBuffer, &fixedInfoSize);
 
 				VS_FIXEDFILEINFO* fixedInfo = reinterpret_cast<VS_FIXEDFILEINFO*>(fixedInfoBuffer);
+
+				auto expectedVersion = 1604;
+
+				if (Is372())
+				{
+					expectedVersion = 372;
+				}
+				else if (Is2060())
+				{
+					expectedVersion = 2060;
+				}
+				else if (Is2189())
+				{
+					expectedVersion = 2189;
+				}
 				
-				if ((fixedInfo->dwFileVersionLS >> 16) != (Is372() ? 372 : ((Is2060()) ? 2060 : 1604)))
+				if ((fixedInfo->dwFileVersionLS >> 16) != expectedVersion)
 				{
 					MessageBox(nullptr, va(L"The found GTA executable (%s) has version %d.%d.%d.%d, but only 1.0.372.2/1.0.1604.0/1.0.2060.0 is currently supported. Please obtain this version, and try again.",
 										   gameExecutable.c_str(),
@@ -739,7 +762,7 @@ int RealMain()
 			//MessageBox(nullptr, va(L"Gameruntime starting (pid %d)", GetCurrentProcessId()), L"CitizenFx", MB_OK);
 #endif
 
-#if defined(GTA_FIVE) && !defined(LAUNCHER_PERSONALITY_GAME) && defined(LAUNCHER_PERSONALITY_MAIN)
+#if (defined(GTA_FIVE) || defined(IS_RDR3)) && !defined(LAUNCHER_PERSONALITY_GAME) && defined(LAUNCHER_PERSONALITY_MAIN)
 			if (initState->IsMasterProcess())
 			{
 				// run game mode

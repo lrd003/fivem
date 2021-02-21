@@ -15,6 +15,10 @@
 
 #include <wrl.h>
 
+#if __has_include(<GameAudioState.h>)
+#include <GameAudioState.h>
+#endif
+
 namespace WRL = Microsoft::WRL;
 
 using nui::GITexture;
@@ -33,6 +37,10 @@ private:
 	uint32_t m_oldSamplerState;
 
 	uint32_t m_pointSamplerState;
+
+	bool m_targetMouseFocus = true;
+
+	bool m_lastTargetMouseFocus = false;
 
 public:
 	virtual void GetGameResolution(int* width, int* height) override;
@@ -58,7 +66,16 @@ public:
 
 	virtual void SetGameMouseFocus(bool val) override
 	{
-		InputHook::SetGameMouseFocus(val);
+		m_targetMouseFocus = val;
+	}
+
+	void UpdateMouseFocus()
+	{
+		if (m_targetMouseFocus != m_lastTargetMouseFocus)
+		{
+			InputHook::SetGameMouseFocus(m_targetMouseFocus);
+			m_lastTargetMouseFocus = m_targetMouseFocus;
+		}
 	}
 
 	virtual HWND GetHWND() override
@@ -104,6 +121,8 @@ public:
 		// unused
 		return NULL;
 	}
+
+	virtual bool RequestMediaAccess(const std::string& frameOrigin, const std::string& url, int permissions, const std::function<void(bool, int)>& onComplete) override;
 };
 
 static tbb::concurrent_queue<std::function<void()>> g_onRenderQueue;
@@ -617,10 +636,24 @@ void GtaNuiInterface::UnsetTexture()
 	g_currentTexture = {};
 }
 
+extern bool HandleMediaRequest(const std::string& frameOrigin, const std::string& url, int permissions, const std::function<void(bool, int)>& onComplete);
+
+bool GtaNuiInterface::RequestMediaAccess(const std::string& frameOrigin, const std::string& url, int permissions, const std::function<void(bool, int)>& onComplete)
+{
+	return HandleMediaRequest(frameOrigin, url, permissions, onComplete);
+}
+
 static GtaNuiInterface nuiGi;
 
 static InitFunction initFunction([]()
 {
+#if __has_include(<GameAudioState.h>)
+	nuiGi.QueryShouldMute.Connect([](bool& shouldMute)
+	{
+		shouldMute = shouldMute || ShouldMuteGameAudio();
+	});
+#endif
+
 	OnGrcCreateDevice.Connect([]()
 	{
 		nuiGi.OnInitRenderer();
@@ -650,6 +683,8 @@ static InitFunction initFunction([]()
 			GfxForceVsync(false);
 		}
 #endif
+
+		nuiGi.UpdateMouseFocus();
 
 		nuiGi.OnRender();
 	}, -1000);

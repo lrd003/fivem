@@ -13,6 +13,7 @@ vendor_component 'picohttpparser'
 vendor_component 'udis86'
 vendor_component 'cpp-url'
 vendor_component 'cpp-url-nortti'
+vendor_component 'xz'
 vendor_component 'xz-crt'
 vendor_component 'curl'
 vendor_component 'curl-crt'
@@ -44,6 +45,7 @@ if os.target() == 'windows' then
 	vendor_component 'minhook' -- r
 end
 
+vendor_component 'hdiffpatch'
 vendor_component 'libfvad'
 vendor_component 'webrtc-audio-processing'
 vendor_component 'pplx'

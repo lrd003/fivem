@@ -24,6 +24,8 @@
 
 #pragma comment(lib, "dwmapi")
 
+#define IMGUI_IMPL_WIN32_DISABLE_GAMEPAD
+
 // Using XInput library for gamepad (with recent Windows SDK this may leads to executables which won't run on Windows 7)
 #ifndef IMGUI_IMPL_WIN32_DISABLE_GAMEPAD
 #include <XInput.h>
@@ -385,6 +387,15 @@ IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARA
     ImGuiIO& io = ImGui::GetIO();
     switch (msg)
     {
+	case WM_ACTIVATEAPP: // CFX addition
+		if (!wParam)
+		{
+			for (auto& key : io.KeysDown)
+			{
+				key = false;
+			}
+		}
+		return 0;
     case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
     case WM_RBUTTONDOWN: case WM_RBUTTONDBLCLK:
     case WM_MBUTTONDOWN: case WM_MBUTTONDBLCLK:
@@ -632,12 +643,10 @@ static void ImGui_ImplWin32_CreateWindow(ImGuiViewport* viewport)
         if (ImGuiViewport* parent_viewport = ImGui::FindViewportByID(viewport->ParentViewportId))
             parent_window = (HWND)parent_viewport->PlatformHandle;
 
-#ifdef IS_RDR3
 	if (parent_window == ImGui::GetMainViewport()->PlatformHandle)
 	{
 		parent_window = NULL;
 	}
-#endif
 
     // Create window
     RECT rect = { (LONG)viewport->Pos.x, (LONG)viewport->Pos.y, (LONG)(viewport->Pos.x + viewport->Size.x), (LONG)(viewport->Pos.y + viewport->Size.y) };

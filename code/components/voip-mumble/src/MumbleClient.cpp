@@ -60,6 +60,9 @@ void MumbleClient::Initialize()
 
 			m_tcp = m_loop->Get()->resource<uvw::TCPHandle>();
 
+			// this is real-time audio, we don't want nagling
+			m_tcp->noDelay(true);
+
 			m_tcp->on<uvw::ConnectEvent>([this](const uvw::ConnectEvent& ev, uvw::TCPHandle& tcp)
 			{
 				m_handler.Reset();
@@ -129,26 +132,36 @@ void MumbleClient::Initialize()
 				}
 			});
 
-			if (!m_udp)
+			// if reconnecting, close the existing UDP handle so that servers that try to match source IP/port pairs won't be unhappy
+			if (m_udp)
 			{
-				m_udp = m_loop->Get()->resource<uvw::UDPHandle>();
+				auto udp = std::move(m_udp);
 
-				m_udp->on<uvw::UDPDataEvent>([this](const uvw::UDPDataEvent& ev, uvw::UDPHandle& udp)
+				udp->once<uvw::CloseEvent>([udp](const uvw::CloseEvent& ev, uvw::UDPHandle& self)
 				{
-					std::unique_lock<std::recursive_mutex> lock(m_clientMutex);
-
-					try
-					{
-						HandleUDP(reinterpret_cast<const uint8_t*>(ev.data.get()), ev.length);
-					}
-					catch (std::exception& e)
-					{
-						trace("Mumble exception: %s\n", e.what());
-					}
+					(void)udp;
 				});
 
-				m_udp->recv();
+				udp->close();
 			}
+
+			m_udp = m_loop->Get()->resource<uvw::UDPHandle>();
+
+			m_udp->on<uvw::UDPDataEvent>([this](const uvw::UDPDataEvent& ev, uvw::UDPHandle& udp)
+			{
+				std::unique_lock<std::recursive_mutex> lock(m_clientMutex);
+
+				try
+				{
+					HandleUDP(reinterpret_cast<const uint8_t*>(ev.data.get()), ev.length);
+				}
+				catch (std::exception& e)
+				{
+					trace("Mumble exception: %s\n", e.what());
+				}
+			});
+
+			m_udp->recv();
 
 			const auto& address = m_connectionInfo.address;
 			m_tcp->connect(*address.GetSocketAddress());
@@ -380,7 +393,14 @@ concurrency::task<MumbleConnectionInfo*> MumbleClient::ConnectAsync(const net::P
 	m_connectionInfo.address = address;
 	m_connectionInfo.username = userName;
 
-	m_curManualChannel = "Root";
+	if (m_curManualChannel.empty())
+	{
+		m_curManualChannel = "Root";
+	}
+	else
+	{
+		m_lastManualChannel = "Root";
+	}
 
 	m_tcpPingAverage = 0.0f;
 	m_tcpPingVariance = 0.0f;
@@ -411,17 +431,40 @@ concurrency::task<void> MumbleClient::DisconnectAsync()
 		m_tlsClient->close();
 	}
 
-	m_loop->EnqueueCallback([this]()
+	auto tcs = concurrency::task_completion_event<void>{};
+
+	m_loop->EnqueueCallback([this, tcs]()
 	{
 		if (m_idleTimer)
 		{
 			m_idleTimer->stop();
 		}
+
+		if (m_connectTimer)
+		{
+			m_connectTimer->stop();
+		}
+
+		if (m_tcp)
+		{
+			m_tcp->once<uvw::CloseEvent>([this, tcs](const uvw::CloseEvent& e, uvw::TCPHandle& h)
+			{
+				tcs.set();
+				m_tcp = {};
+			});
+
+			m_tcp->shutdown();
+			m_tcp->close();
+		}
+		else
+		{
+			tcs.set();
+		}
 	});
 
 	m_connectionInfo = {};
 
-	return concurrency::task_from_result();
+	return concurrency::task<void>(tcs);
 }
 
 void MumbleClient::SetActivationMode(MumbleActivationMode mode)

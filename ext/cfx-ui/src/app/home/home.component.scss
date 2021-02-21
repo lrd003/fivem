@@ -67,7 +67,7 @@
 
 				transition: all .2s ease;
 
-				&:hover {
+				&:hover, &:focus {
 					transition: none;
 
 					@include theme() using ($theme) {
@@ -196,7 +196,7 @@
 				}
 			}
 
-			&:hover {
+			&:hover, &:focus {
 				transition: none;
 
 				@include theme() using ($theme) {
@@ -237,7 +237,11 @@
 				}
 				animation: bganim 40s linear 0s infinite;
 
-				&:hover {
+				@include theme() using ($theme) {
+					box-shadow: 0 0 0 2px rgba(gtv($theme, accentColor1), .5) inset;
+				}
+
+				&:hover, &:focus {
 					transition: none;
 
 					@include theme() using ($theme) {
@@ -266,7 +270,7 @@
 
 				transition: all .2s ease;
 
-				&:hover {
+				&:hover, &:focus {
 					opacity: 1;
 
 					transition: none;
@@ -509,7 +513,7 @@
 					@include theme() using ($theme) {
 						background-color: rgba(gtv($theme, bgColor), .2);
 
-						&:hover {
+						&:hover, &:focus {
 							background-color: gtv($theme, accentColor1);
 						}
 					}
@@ -544,7 +548,7 @@
 				@include backdropPane;
 
 				@include theme() using ($theme) {
-					&:hover {
+					&:hover, &:focus {
 						background-color: gtv($theme, accentColor1);
 
 						transition: none;
@@ -629,7 +633,7 @@
 				}
 
 				content: ' ';
-				
+
 				position: absolute;
 				top: 0px;
 				left: 0px;

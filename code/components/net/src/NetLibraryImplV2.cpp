@@ -153,8 +153,18 @@ void NetLibraryImplV2::SendData(const NetAddress& netAddress, const char* data, 
 	enet_socket_send(m_host->socket, &addr, &buffer, 1);
 }
 
+extern int g_serverVersion;
+
 bool NetLibraryImplV2::HasTimedOut()
 {
+	if (!m_serverPeer)
+	{
+		if (g_serverVersion >= 3419)
+		{
+			return true;
+		}
+	}
+
 	return m_timedOut;
 }
 
@@ -310,6 +320,9 @@ void NetLibraryImplV2::SendConnect(const std::string& connectData)
 
 	auto addr = m_base->GetCurrentServer().GetENetAddress();
 	m_serverPeer = enet_host_connect(m_host, &addr, 2, 0);
+
+	// all-but-disable the backoff-based timeout, and set the hard timeout to 30 seconds (equivalent to server-side check!)
+	enet_peer_timeout(m_serverPeer, 10000000, 10000000, 30000);
 
 #ifdef _DEBUG
 	//enet_peer_timeout(m_serverPeer, 86400 * 1000, 86400 * 1000, 86400 * 1000);

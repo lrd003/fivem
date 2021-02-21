@@ -273,8 +273,10 @@ export class AppComponent implements OnInit, AfterViewInit {
 			(<HTMLDivElement>document.querySelector('app-root')).style.opacity = '1';
 
 			setTimeout(() => {
+				(<HTMLDivElement>document.querySelector('.booting')).style.display = 'none';
+
 				this.gameService.sayHello();
-			}, 50);
+			}, 150);
 		};
 
 		if (environment.web || !environment.production) {
@@ -308,6 +310,10 @@ export class AppComponent implements OnInit, AfterViewInit {
 	}
 
 	ngAfterViewInit(): void {
+		if (!this.gameCanvas) {
+			return;
+		}
+
 		this.gameView = createGameView(this.gameCanvas.nativeElement);
 		this.gameView.resize(window.innerWidth, window.innerHeight);
 

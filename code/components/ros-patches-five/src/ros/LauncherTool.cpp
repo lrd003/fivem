@@ -153,7 +153,7 @@ static void Steam_Run(const boost::program_options::variables_map& map)
 
 	ValidateSteam(g_rosParentPid);
 
-	HANDLE hEvent = OpenEvent(EVENT_MODIFY_STATE, FALSE, L"CitizenFX_GTA5_ClearedForLaunch");
+	HANDLE hEvent = OpenEvent(EVENT_MODIFY_STATE, FALSE, L"CitizenFX_GTA5_ClearedForLaunch_Steam");
 
 	if (hEvent != INVALID_HANDLE_VALUE)
 	{
@@ -161,6 +161,17 @@ static void Steam_Run(const boost::program_options::variables_map& map)
 		CloseHandle(hEvent);
 	}
 
+	TerminateProcess(GetCurrentProcess(), 0);
+}
+
+void ValidateEpic(int parentPid);
+
+static void Epic_Run(const boost::program_options::variables_map& map)
+{
+	auto args = map["cake"].as<std::vector<std::wstring>>();
+	g_rosParentPid = map["parent_pid"].as<int>();
+
+	ValidateEpic(g_rosParentPid);
 	TerminateProcess(GetCurrentProcess(), 0);
 }
 
@@ -465,8 +476,8 @@ static void Launcher_Run(const boost::program_options::variables_map& map)
 {
 	// make firstrun.dat so the launcher won't whine/crash
 	{
-		CreateDirectoryW(MakeRelativeCitPath(L"cache\\game\\ros_launcher_appdata2").c_str(), NULL);
-		FILE* f = _wfopen(MakeRelativeCitPath(L"cache\\game\\ros_launcher_appdata2\\firstrun.dat").c_str(), L"wb");
+		CreateDirectoryW(MakeRelativeCitPath(L"cache\\game\\ros_launcher_appdata3").c_str(), NULL);
+		FILE* f = _wfopen(MakeRelativeCitPath(L"cache\\game\\ros_launcher_appdata3\\firstrun.dat").c_str(), L"wb");
 
 		if (f)
 		{
@@ -516,7 +527,7 @@ static void Launcher_Run(const boost::program_options::variables_map& map)
 		MH_CreateHook(pref, pf, (void**)&opf);
 		MH_EnableHook(MH_ALL_HOOKS);
 
-		hook::jump(hook::get_pattern("4C 89 44 24 18 4C 89 4C 24 20 C3"), LogStuff);
+		hook::jump(hook::get_pattern("4C 89 44 24 18 4C 89 4C 24 20 48 83 EC 28 48 8D"), LogStuff);
 
 		hook::iat("version.dll", GetFileVersionInfoAStub, "GetFileVersionInfoA");
 
@@ -584,6 +595,7 @@ static void Launcher_Run(const boost::program_options::variables_map& map)
 static FxToolCommand rosSubprocess("ros:launcher", Launcher_HandleArguments, Launcher_Run);
 static FxToolCommand rosSubprocess2("ros:legit", Launcher_HandleArguments, Legit_Run);
 static FxToolCommand rosSubprocess3("ros:steam", Launcher_HandleArguments, Steam_Run);
+static FxToolCommand rosSubprocess4("ros:epic", Launcher_HandleArguments, Epic_Run);
 
 void RunLauncher(const wchar_t* toolName, bool instantWait);
 void RunLauncherAwait();
@@ -698,8 +710,14 @@ static HookFunction hookFunction([] ()
 	{
 		hook::iat("crypt32.dll", CertGetNameStringStubW, "CertGetNameStringW");
 		hook::iat("crypt32.dll", CertGetNameStringStubA, "CertGetNameStringA");
-		hook::iat("kernel32.dll", LocalFreeStub, "LocalFree");
+		hook::iat("wintrust.dll", WinVerifyTrustStub, "WinVerifyTrust");
 	}
+
+	// newer SC SDK will otherwise overflow in cert name
+#ifndef IS_RDR3
+	hook::iat("crypt32.dll", CertGetNameStringStubA, "CertGetNameStringA");
+	hook::iat("kernel32.dll", LocalFreeStub, "LocalFree");
+#endif
 
     hook::iat("user32.dll", LoadIconStub, "LoadIconA");
     hook::iat("user32.dll", LoadIconStub, "LoadIconW");
@@ -717,6 +735,6 @@ static HookFunction hookFunction([] ()
 	// same for distantlights
 	void* distantLightInit = hook::pattern("48 8D 68 A1 48 81 EC F0 00 00 00 BE 01 00").count(1).get(0).get<void>(-0x10);
 
-	hook::call(skyInitLoc + (Is2060() ? 0x2FA : 0x30B), distantLightInit);
+	hook::call(skyInitLoc + (xbr::IsGameBuildOrGreater<2060>() ? 0x2FA : 0x30B), distantLightInit);
 #endif
 });

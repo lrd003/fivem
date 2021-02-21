@@ -30,6 +30,13 @@
 
 #include <CrossBuildRuntime.h>
 
+#include <ResourceManager.h>
+#include <ResourceEventComponent.h>
+
+#if __has_include(<GameAudioState.h>)
+#include <GameAudioState.h>
+#endif
+
 class FxNativeInvoke
 {
 private:
@@ -114,8 +121,16 @@ static struct
 	concurrency::concurrent_queue<std::function<void()>> mainFrameExecQueue;
 } g_mumble;
 
+static bool g_voiceActiveByScript = true;
+
+static bool Mumble_ShouldConnect()
+{
+	return g_preferenceArray[PREF_VOICE_ENABLE] && Instance<ICoreGameInit>::Get()->OneSyncEnabled && g_voiceActiveByScript;
+}
+
 static void Mumble_Connect()
 {
+	g_mumble.connected = false;
 	g_mumble.errored = false;
 	g_mumble.connecting = true;
 
@@ -126,6 +141,18 @@ static void Mumble_Connect()
 		try
 		{
 			auto info = task.get();
+
+			auto eventManager = Instance<fx::ResourceManager>::Get()->GetComponent<fx::ResourceEventManagerComponent>();
+
+			/*NETEV mumbleConnected CLIENT
+			/#*
+			 * An event triggered when the game completes (re)connecting to a Mumble server.
+			 *
+			 * @param address - The address of the Mumble server connected to.
+			 #/
+			declare function mumbleConnected(address: string): void;
+			*/
+			eventManager->QueueEvent2("mumbleConnected", {}, info->address.ToString());
 
 			g_mumble.connectionInfo = g_mumbleClient->GetConnectionInfo();
 
@@ -157,7 +184,7 @@ static void Mumble_Disconnect(bool reconnect = false)
 
 	g_mumbleClient->DisconnectAsync().then([=]()
 	{
-		if (reconnect)
+		if (reconnect && Mumble_ShouldConnect())
 		{
 			Mumble_Connect();
 		}
@@ -203,11 +230,9 @@ static void Mumble_RunFrame()
 		return;
 	}
 
-	bool shouldConnect = g_preferenceArray[PREF_VOICE_ENABLE] && Instance<ICoreGameInit>::Get()->OneSyncEnabled;
-
 	if (!g_mumble.connected || (g_mumble.connectionInfo && !g_mumble.connectionInfo->isConnected))
 	{
-		if (shouldConnect && !g_mumble.connecting && !g_mumble.errored)
+		if (Mumble_ShouldConnect() && !g_mumble.connecting && !g_mumble.errored)
 		{
 			if (GetTickCount64() > g_mumble.nextConnectAt)
 			{
@@ -226,7 +251,7 @@ static void Mumble_RunFrame()
 	}
 	else
 	{
-		if (!shouldConnect)
+		if (!Mumble_ShouldConnect())
 		{
 			Mumble_Disconnect();
 		}
@@ -252,7 +277,16 @@ static void Mumble_RunFrame()
 
 	g_mumbleClient->SetActivationMode(activationMode);
 
-	g_mumbleClient->SetOutputVolume(g_preferenceArray[PREF_VOICE_OUTPUT_VOLUME] * 0.1f);
+#if __has_include(<GameAudioState.h>)
+	if (ShouldMuteGameAudio())
+	{
+		g_mumbleClient->SetOutputVolume(0.0f);
+	}
+	else
+#endif
+	{
+		g_mumbleClient->SetOutputVolume(g_preferenceArray[PREF_VOICE_OUTPUT_VOLUME] * 0.1f);
+	}
 
 	float cameraFront[3];
 	float cameraTop[3];
@@ -456,6 +490,8 @@ static HookFunction initFunction([]()
 
 		Mumble_Disconnect();
 		o_talkers.reset();
+
+		g_voiceActiveByScript = true;
 	});
 });
 
@@ -481,7 +517,7 @@ static bool _isPlayerTalking(void* mgr, char* playerData)
 	// #TODO1365
 	// #TODO1493
 	// #TODO1604
-	auto playerInfo = playerData - 32 - 48 - 16 - (Is2060() ? 8 : 0);
+	auto playerInfo = playerData - 32 - 48 - 16 - (xbr::IsGameBuildOrGreater<2060>() ? 8 : 0);
 
 	// get the ped
 	auto ped = *(char**)(playerInfo + 456);
@@ -955,6 +991,15 @@ static HookFunction hookFunction([]()
 			float proximity = g_mumbleClient->GetAudioDistance();
 
 			context.SetResult<float>(proximity);
+		});
+
+		auto origSetVoiceActive = fx::ScriptEngine::GetNativeHandler(0xBABEC9E69A91C57B);
+
+		fx::ScriptEngine::RegisterNativeHandler(0xBABEC9E69A91C57B, [origSetVoiceActive](fx::ScriptContext& context)
+		{
+			(*origSetVoiceActive)(context);
+
+			g_voiceActiveByScript = context.GetArgument<bool>(0);
 		});
 	});
 

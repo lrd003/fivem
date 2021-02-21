@@ -4,6 +4,7 @@
 #include <atArray.h>
 #include <atPool.h>
 #include <Streaming.h>
+#include <CrossBuildRuntime.h>
 
 #include <tbb/combinable.h>
 #include <tbb/parallel_for.h>
@@ -64,7 +65,7 @@ static hook::cdecl_stub<void(void*, const uint32_t&, atArray<int>*& const)> _has
 
 static hook::cdecl_stub<bool(void*, uint32_t)> _IsObjectInImage([]()
 {
-	return hook::get_pattern("74 20 8B C2 48", -7);
+	return hook::get_pattern("74 20 8B C2 48 8B", -7);
 });
 
 static void CreateDependentsGraph(strStreamingInfoManager* self, atArray<int>& packfiles)
@@ -99,7 +100,7 @@ static void CreateDependentsGraph(strStreamingInfoManager* self, atArray<int>& p
 	}
 
 	// sort the set into a real one, please
-	std::unordered_set<uint32_t> realSet;
+	std::set<uint32_t> realSet;
 	auto str = (streaming::Manager*)self;
 
 	for (auto& entry : set.entries)
@@ -116,7 +117,7 @@ static void CreateDependentsGraph(strStreamingInfoManager* self, atArray<int>& p
 
 	while (true)
 	{
-		tbb::combinable<std::unordered_set<uint32_t>> dependents;
+		tbb::combinable<std::set<uint32_t>> dependents;
 
 		// for time
 		// R* did a similar division in RDR3, each thread gets a chunk of streaming entries
@@ -152,11 +153,11 @@ static void CreateDependentsGraph(strStreamingInfoManager* self, atArray<int>& p
 		});
 
 		// collect both sets
-		std::unordered_set<uint32_t> bigSet;
-		dependents.combine_each([&bigSet](const std::unordered_set<uint32_t>& right)
+		std::set<uint32_t> bigSet;
+		dependents.combine_each([&bigSet](const std::set<uint32_t>& right)
 		{
 			// let's violate const safety
-			bigSet.merge(const_cast<std::unordered_set<uint32_t>&>(right));
+			bigSet.merge(const_cast<std::set<uint32_t>&>(right));
 		});
 
 		dependents.clear();
@@ -245,8 +246,9 @@ static void AnimDirector_InitAfterMapLoaded(int why)
 
 static HookFunction hookFunction([]()
 {
-	hook::jump(hook::get_pattern("45 8D 70 01 66 39 B1 A2 01 00 00 74 41", -0x38), CreateDependentsGraph);
+	//hook::jump(hook::get_pattern("45 8D 70 01 66 39 B1 A2 01 00 00 74 41", -0x38), CreateDependentsGraph);
 
+	if (!xbr::IsGameBuildOrGreater<2060>())
 	{
 		auto location = hook::get_pattern<char>("33 FF 44 8D 71 7C C1 E0 02", -0x1F);
 		hook::set_call(&g_origInitAnim, location + 0x2D0);

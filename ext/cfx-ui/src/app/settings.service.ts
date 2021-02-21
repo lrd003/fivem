@@ -85,22 +85,12 @@ export class SettingsService {
 			category: '#SettingsCat_Interface'
 		})
 
-		this.addSetting('devMode', {
-			name: '#Settings_DevMode',
-			description: '#Settings_DevModeDesc',
-			type: 'checkbox',
-			getCb: () => this.gameService.devModeChange.map(a => a ? 'true' : 'false'),
-			setCb: (value) => this.gameService.devMode = (value === 'true'),
-			category: '#SettingsCat_Interface',
-		});
-
 		this.addSetting('localhostPort', {
-			name: '#Settings_LocalhostPort',
-			description: '#Settings_LocalhostPort',
+			name: '#Settings_LocalhostPort2',
+			description: '#Settings_LocalhostPort2',
 			type: 'text',
 			getCb: () => this.gameService.localhostPortChange,
 			setCb: (value) => this.gameService.localhostPort = value,
-			showCb: () => this.gameService.devModeChange,
 			category: '#SettingsCat_Interface',
 		});
 
@@ -127,7 +117,7 @@ export class SettingsService {
 				name: '#Settings_GameStreamProgress',
 				description: '#Settings_GameStreamProgressDesc',
 				type: 'checkbox',
-				getCb: () => this.gameService.getConvar('game_showStreamingProgress'),
+				getCb: () => this.gameService.getConvar('game_showStreamingProgress').pipe(map(a => a === 'true' ? 'true' : 'false')),
 				setCb: (value) => this.gameService.setConvar('game_showStreamingProgress', value),
 				category: '#SettingsCat_Game',
 			});

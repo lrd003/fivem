@@ -5,21 +5,38 @@
 
 #include <CrossBuildRuntime.h>
 
-#ifdef GTA_FIVE
-inline uintptr_t GetTriggerEP()
+#if defined(GTA_FIVE) || defined(IS_RDR3)
+inline static uintptr_t GetLauncherTriggerEP()
 {
 	if (getenv("CitizenFX_ToolMode"))
 	{
 		if (wcsstr(GetCommandLineW(), L"launcher.exe"))
 		{
-			// launcher.exe with sha256 hash 82935c8082c823e9ee275670ab218618b2101e3bc14091fe424539d8b44a68fe
-			return 0x1401BD2A4;
+			// launcher.exe with sha256 hash 0cc0862222ab2a8aa714658aff7d9f5897dfd8eceb0b279ffcda1df9de7e9774
+			return 0x1401F227C;
 		}
+	}
+
+	return 0;
+}
+#endif
+
+#ifdef GTA_FIVE
+inline uintptr_t GetTriggerEP()
+{
+	if (auto ep = GetLauncherTriggerEP(); ep != 0)
+	{
+		return ep;
 	}
 
 	if (Is372())
 	{
 		return 0x141623FC8;
+	}
+
+	if (xbr::IsGameBuild<2189>())
+	{
+		return 0x1417ACE74;
 	}
 
 	if (Is2060())
@@ -35,29 +52,23 @@ inline uintptr_t GetTriggerEP()
 // 2060 realities
 #define TRIGGER_EP (GetTriggerEP())
 #elif defined(IS_RDR3)
-// 1207.58
-//#define TRIGGER_EP 0x142D55C2C
+inline uintptr_t GetTriggerEP()
+{
+	if (auto ep = GetLauncherTriggerEP(); ep != 0)
+	{
+		return ep;
+	}
 
-// 1207.69
-//#define TRIGGER_EP 0x142D5B8FC
+	if (xbr::IsGameBuild<1355>())
+	{
+		return 0x142DE455C;
+	}
 
-// 1207.77
-//#define TRIGGER_EP 0x142D5F80C
+	// 1311.20
+	return 0x142E0F92C;
+}
 
-// 1207.80
-//#define TRIGGER_EP 0x142D601AC
-
-// 1311.12
-//#define TRIGGER_EP 0x142E0E63C
-
-// 1311.14
-//#define TRIGGER_EP 0x142E0F9BC
-
-// 1311.16
-#define TRIGGER_EP 0x142E0EF1C
-
-// 1311.20
-#define TRIGGER_EP 0x142E0F92C
+#define TRIGGER_EP (GetTriggerEP())
 #else
 #define TRIGGER_EP 0xDECEA5ED
 #endif

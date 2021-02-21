@@ -346,6 +346,50 @@ static InitFunction initFunction([]()
 		}
 	}));
 
+	fx::ScriptEngine::RegisterNativeHandler("SET_ROUTING_BUCKET_POPULATION_ENABLED", [](fx::ScriptContext& context)
+	{
+		int bucket = context.GetArgument<int>(0);
+		bool enabled = context.GetArgument<bool>(1);
+
+		// get the current resource manager
+		auto resourceManager = fx::ResourceManager::GetCurrent();
+
+		// get the owning server instance
+		auto instance = resourceManager->GetComponent<fx::ServerInstanceBaseRef>()->Get();
+
+		// get the server's game state
+		auto gameState = instance->GetComponent<fx::ServerGameState>();
+		gameState->SetPopulationDisabled(bucket, !enabled);
+	});
+
+	fx::ScriptEngine::RegisterNativeHandler("SET_ROUTING_BUCKET_ENTITY_LOCKDOWN_MODE", [](fx::ScriptContext& context)
+	{
+		int bucket = context.GetArgument<int>(0);
+		std::string_view sv = context.CheckArgument<const char*>(1);
+
+		// get the current resource manager
+		auto resourceManager = fx::ResourceManager::GetCurrent();
+
+		// get the owning server instance
+		auto instance = resourceManager->GetComponent<fx::ServerInstanceBaseRef>()->Get();
+
+		// get the server's game state
+		auto gameState = instance->GetComponent<fx::ServerGameState>();
+
+		if (sv == "strict")
+		{
+			gameState->SetEntityLockdownMode(bucket, fx::EntityLockdownMode::Strict);
+		}
+		else if (sv == "relaxed")
+		{
+			gameState->SetEntityLockdownMode(bucket, fx::EntityLockdownMode::Relaxed);
+		}
+		else if (sv == "inactive")
+		{
+			gameState->SetEntityLockdownMode(bucket, fx::EntityLockdownMode::Inactive);
+		}
+	});
+
 	fx::ScriptEngine::RegisterNativeHandler("SET_SYNC_ENTITY_LOCKDOWN_MODE", [](fx::ScriptContext& context)
 	{
 		std::string_view sv = context.CheckArgument<const char*>(0);
@@ -504,14 +548,14 @@ static InitFunction initFunction([]()
 	{
 		auto vn = entity->syncTree->GetVehicleHealth();
 
-		return vn ? vn->engineHealth : 0;
+		return vn ? float(vn->engineHealth) : 0;
 	}));
 
 	fx::ScriptEngine::RegisterNativeHandler("GET_VEHICLE_PETROL_TANK_HEALTH", makeEntityFunction([](fx::ScriptContext& context, const fx::sync::SyncEntityPtr& entity)
 	{
 		auto vn = entity->syncTree->GetVehicleHealth();
 
-		return vn ? vn->petrolTankHealth : 0;
+		return vn ? float(vn->petrolTankHealth) : 0;
 	}));
 
 	fx::ScriptEngine::RegisterNativeHandler("IS_VEHICLE_TYRE_BURST", makeEntityFunction([](fx::ScriptContext& context, const fx::sync::SyncEntityPtr& entity)
@@ -546,7 +590,7 @@ static InitFunction initFunction([]()
 	{
 		auto vn = entity->syncTree->GetVehicleHealth();
 
-		return vn ? vn->bodyHealth : 0;
+		return vn ? float(vn->bodyHealth) : 0;
 	}));
 
 	fx::ScriptEngine::RegisterNativeHandler("GET_PED_MAX_HEALTH", makeEntityFunction([](fx::ScriptContext& context, const fx::sync::SyncEntityPtr& entity)
@@ -749,7 +793,7 @@ static InitFunction initFunction([]()
 	{
 		auto vn = entity->syncTree->GetVehicleAppearance();
 
-		return vn ? vn->dirtLevel : 0;
+		return vn ? float(vn->dirtLevel) : 0;
 	}));
 
 	fx::ScriptEngine::RegisterNativeHandler("GET_VEHICLE_WHEEL_TYPE", makeEntityFunction([](fx::ScriptContext& context, const fx::sync::SyncEntityPtr& entity)
@@ -1153,7 +1197,7 @@ static InitFunction initFunction([]()
 		{
 			auto bucket = context.GetArgument<int>(1);
 
-			if (bucket >= 0 && bucket < fx::kNumRoutingBuckets)
+			if (bucket >= 0)
 			{
 				// get the current resource manager
 				auto resourceManager = fx::ResourceManager::GetCurrent();
@@ -1196,7 +1240,7 @@ static InitFunction initFunction([]()
 		{
 			auto bucket = context.GetArgument<int>(1);
 
-			if (bucket >= 0 && bucket < fx::kNumRoutingBuckets)
+			if (bucket >= 0)
 			{
 				entity->routingBucket = bucket;
 			}
@@ -1210,5 +1254,83 @@ static InitFunction initFunction([]()
 		auto pn = entity->syncTree->GetPlayerGameState();
 
 		return pn ? pn->isInvincible : false;
+	}));
+
+	fx::ScriptEngine::RegisterNativeHandler("GET_PLAYER_CAMERA_ROTATION", MakePlayerEntityFunction([](fx::ScriptContext& context, const fx::sync::SyncEntityPtr& entity)
+	{
+		auto camData = entity->syncTree->GetPlayerCamera();
+
+		scrVector resultVector = { 0 };
+
+		if (camData)
+		{
+			resultVector.x = camData->cameraX;
+			resultVector.y = 0.0f;
+			resultVector.z = camData->cameraZ;
+		}
+		else
+		{
+			resultVector.x = 0.0f;
+			resultVector.y = 0.0f;
+			resultVector.z = 0.0f;
+		}
+
+		return resultVector;
+	}));
+
+	fx::ScriptEngine::RegisterNativeHandler("GET_TRAIN_CARRIAGE_ENGINE", makeEntityFunction([](fx::ScriptContext& context, const fx::sync::SyncEntityPtr& entity)
+	{
+		auto train = entity->syncTree->GetTrainState();
+
+		if (!train)
+		{
+			return uint32_t(0);
+		}
+
+		auto resourceManager = fx::ResourceManager::GetCurrent();
+
+		auto instance = resourceManager->GetComponent<fx::ServerInstanceBaseRef>()->Get();
+
+		auto gameState = instance->GetComponent<fx::ServerGameState>();
+
+		auto engine = gameState->GetEntity(0, train->engineCarriage);
+
+		return engine ? gameState->MakeScriptHandle(engine) : 0;
+	}));
+
+	fx::ScriptEngine::RegisterNativeHandler("GET_TRAIN_CARRIAGE_INDEX", makeEntityFunction([](fx::ScriptContext& context, const fx::sync::SyncEntityPtr& entity)
+	{
+		auto train = entity->syncTree->GetTrainState();
+
+		return train ? train->carriageIndex : -1;
+	}));
+
+	fx::ScriptEngine::RegisterNativeHandler("GET_PLAYER_FAKE_WANTED_LEVEL", MakePlayerEntityFunction([](fx::ScriptContext& context, const fx::sync::SyncEntityPtr& entity)
+	{
+		auto pn = entity->syncTree->GetPlayerWantedAndLOS();
+
+		return pn ? pn->fakeWantedLevel : 0;
+	}));
+
+	fx::ScriptEngine::RegisterNativeHandler("GET_PLAYER_WANTED_CENTRE_POSITION", MakePlayerEntityFunction([](fx::ScriptContext& context, const fx::sync::SyncEntityPtr& entity)
+	{
+		auto pn = entity->syncTree->GetPlayerWantedAndLOS();
+
+		scrVector resultVector = { 0 };
+
+		if (pn)
+		{
+			resultVector.x = pn->wantedPositionX;
+			resultVector.y = pn->wantedPositionY;
+			resultVector.z = pn->wantedPositionZ;
+		}
+		else
+		{
+			resultVector.x = 0.0f;
+			resultVector.y = 0.0f;
+			resultVector.z = 0.0f;
+		}
+
+		return resultVector;
 	}));
 });

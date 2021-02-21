@@ -33,6 +33,7 @@
 #include "memdbgon.h"
 
 #include <CoreConsole.h>
+#include <Hooking.h>
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -42,6 +43,8 @@
 
 #include <VFSManager.h>
 #include <VFSZipFile.h>
+
+#include <Error.h>
 
 namespace nui
 {
@@ -524,7 +527,7 @@ HRESULT Texture2DWrap::GetSharedHandle(HANDLE* pSharedHandle)
 
 	if (SUCCEEDED(hr))
 	{
-		auto proc = OpenProcess(PROCESS_DUP_HANDLE, FALSE, initState->GetInitialPid());
+		auto proc = OpenProcess(PROCESS_DUP_HANDLE, FALSE, (initState->gamePid) ? initState->gamePid : initState->GetInitialPid());
 		DuplicateHandle(GetCurrentProcess(), handle, proc, pSharedHandle, 0, FALSE, DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE);
 		CloseHandle(proc);
 
@@ -705,7 +708,7 @@ static void PatchCreateResults(ID3D11Device** ppDevice, ID3D11DeviceContext** pp
 	can = wcsstr(GetCommandLineW(), L"type=gpu") != nullptr;
 #endif
 
-	if (ppDevice && ppImmediateContext && can)
+	if (ppDevice && ppImmediateContext && can && *ppDevice && *ppImmediateContext)
 	{
 		auto vtbl = **(intptr_t***)ppDevice;
 		auto vtblCxt = **(intptr_t***)ppImmediateContext;
@@ -725,7 +728,7 @@ static void PatchCreateResults(ID3D11Device** ppDevice, ID3D11DeviceContext** pp
 		(*ppDevice)->GetImmediateContext(&g_origImContext);
 	}
 
-	if (ppDevice && ppImmediateContext)
+	if (ppDevice && ppImmediateContext && *ppDevice)
 	{
 		g_origDevice = *ppDevice;
 	}
@@ -897,9 +900,20 @@ void Component_RunPreInit()
 
 	if (!libcef)
 	{
-		MessageBoxW(NULL, L"Could not load bin/libcef.dll.", L"CitizenFX", MB_ICONSTOP | MB_OK);
+		auto gle = GetLastError();
 
-		ExitProcess(0);
+		_wunlink(MakeRelativeCitPath(L"caches.xml").c_str());
+		FatalError("Could not load bin/libcef.dll.\nLoadLibraryW failed for reason %d.", gle);
+	}
+
+	{
+		// echo network::SetFetchMetadataHeaders | pdbdump -r libcef.dll.pdb:0x180000000
+		auto network__SetFetchMetadataHeaders = (uint8_t*)((char*)libcef + 0x3d36e0c);
+
+		if (*network__SetFetchMetadataHeaders == 0x41)
+		{
+			hook::putVP<uint8_t>(network__SetFetchMetadataHeaders, 0xC3);
+		}
 	}
 
 	__HrLoadAllImportsForDll("libcef.dll");
